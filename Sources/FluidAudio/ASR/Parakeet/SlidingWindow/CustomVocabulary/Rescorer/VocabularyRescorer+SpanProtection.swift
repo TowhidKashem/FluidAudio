@@ -67,6 +67,33 @@ extension VocabularyRescorer {
         return replacement + String(lexicalOriginal.suffix(2))
     }
 
+    /// A correction replaces the words, not the punctuation around them: "Speak Mac, let's" → "Speakmac, let's",
+    /// "(Speak Mac)" → "(Speakmac)". Keeps the closing punctuation of the span's last word and the opening punctuation
+    /// of its first word; punctuation between the span's words goes, since the span becomes one term. Apostrophes are
+    /// left to `preservingPossessive`.
+    static func preservingBoundaryPunctuation(_ replacement: String, spanWords: [String]) -> String {
+        let words = spanWords.filter { !$0.isEmpty }
+        guard let first = words.first, let last = words.last, !replacement.isEmpty else { return replacement }
+
+        let closing = String(last.reversed().prefix(while: { closingPunctuation.contains($0) }).reversed())
+        let opening = String(first.prefix(while: { openingPunctuation.contains($0) }))
+        // A span that is nothing but punctuation is not a word boundary to preserve.
+        guard closing.count < last.count, opening.count < first.count else { return replacement }
+
+        // The term may already carry part of the run ("Inc." before ".,"), so add only the rest.
+        var result = replacement
+        let closingKept = (0...closing.count).reversed().first { result.hasSuffix(closing.prefix($0)) } ?? 0
+        result += closing.dropFirst(closingKept)
+        let openingKept = (0...opening.count).reversed().first { result.hasPrefix(opening.suffix($0)) } ?? 0
+        result = String(opening.dropLast(openingKept)) + result
+        return result
+    }
+
+    private static let closingPunctuation: Set<Character> = [
+        ".", ",", "!", "?", ";", ":", "…", ")", "]", "}", "\"", "”", "»",
+    ]
+    private static let openingPunctuation: Set<Character> = ["(", "[", "{", "\"", "“", "«", "¿", "¡"]
+
     /// Whether `original` already spells `canonical`, allowing a possessive inflection.
     static func isCanonicalMatch(_ original: String, canonical: String) -> Bool {
         isCanonicalMatch(lexical: normalizedLexical(original), canonicalKey: normalizedLexical(canonical))
@@ -90,15 +117,28 @@ extension VocabularyRescorer {
     /// repetition. An unrelated neighboring word must not gain that same bonus.
     static func isTextSupportedRepetition(_ candidate: CTCMatchCandidate) -> Bool {
         if candidate.similarity == 1 { return true }  // Exact alias or compound spelling, including BK-tree matches.
-        func lexicalCore(_ text: String) -> String {
-            let normalized = normalizedLexical(text)
-            if normalized.hasSuffix("'s") { return String(normalized.dropLast(2)) }
-            if normalized.hasSuffix("s'") { return String(normalized.dropLast()) }
-            return normalized
-        }
         let original = lexicalCore(candidate.originalPhrase)
         let forms = [candidate.vocabTerm] + (candidate.matchedAlias.map { [$0] } ?? [])
         return forms.contains { StringUtils.levenshteinDistance(original, lexicalCore($0)) <= 1 }
+    }
+
+    /// Whether the span is a close spelling of the term or its matched alias, possessive aside ("Quiltor's" /
+    /// "Quilter", "Rashid" / "Rasyid"), at `ContextBiasingConstants.closeSpellingSimilarity`: a spelling
+    /// preference, where the listed form should win even over a confident decode.
+    static func isCloseSpelling(_ candidate: CTCMatchCandidate) -> Bool {
+        let threshold = ContextBiasingConstants.closeSpellingSimilarity
+        if candidate.similarity >= threshold { return true }
+        let original = lexicalCore(candidate.originalPhrase)
+        let forms = [candidate.vocabTerm] + (candidate.matchedAlias.map { [$0] } ?? [])
+        return forms.contains { stringSimilarity(original, lexicalCore($0)) >= threshold }
+    }
+
+    /// `normalizedLexical` without a trailing possessive: "Quiltor's" → "quiltor", "Jonnes'" → "jonnes".
+    static func lexicalCore(_ text: String) -> String {
+        let normalized = normalizedLexical(text)
+        if normalized.hasSuffix("'s") { return String(normalized.dropLast(2)) }
+        if normalized.hasSuffix("s'") { return String(normalized.dropLast()) }
+        return normalized
     }
 
     struct RecognizedVocabularySpans {

@@ -224,6 +224,7 @@ enum TranscribeCommand {
         var melChunkContext: Bool? = nil
         var dualDecodeArbitration = false
         var seamGapRepair = true
+        var seamGapRepairMinGapSeconds: Double? = nil
         var seamTimingRealignment = true
         var streamingMode = false
 
@@ -403,6 +404,11 @@ enum TranscribeCommand {
                 parsed.dualDecodeArbitration = true
             case "--no-seam-gap-repair":
                 parsed.seamGapRepair = false
+            case "--seam-gap-min":
+                if i + 1 < args.count {
+                    parsed.seamGapRepairMinGapSeconds = Double(args[i + 1])
+                    i += 1
+                }
             case "--no-seam-timing-realignment":
                 parsed.seamTimingRealignment = false
 
@@ -647,6 +653,8 @@ enum TranscribeCommand {
                 melChunkContext: args.melChunkContext,
                 dualDecodeArbitration: args.dualDecodeArbitration,
                 seamGapRepair: args.seamGapRepair,
+                seamGapRepairMinGapSeconds: args.seamGapRepairMinGapSeconds
+                    ?? ASRConfig.default.seamGapRepairMinGapSeconds,
                 seamTimingRealignment: args.seamTimingRealignment
             )
             let asrManager = AsrManager(config: asrConfig)
@@ -1236,11 +1244,12 @@ enum TranscribeCommand {
                 --local-model-dir <path>       Exact compiled model directory; never downloads
                 --encoder-precision <int8|int8-v2|int4> Encoder quantization (default: int8;
                                                int8-v2 = int8-linear rebuild, avoids #760)
-                --language <code>              Language hint (e.g., en, de, fr, es)
+                --language <code>              Script hint (e.g., en, de, fr, es): keeps v3 to the language's
+                                               script; Latin languages decode alike, except fr (#1063)
                 --custom-vocab <file>          Apply vocabulary boosting in batch mode
                 --no-mel-context               Disable 80ms mel-context prepend for long-form batch ASR
-                                               (default: disabled on v3, enabled otherwise)
-                --mel-context                  Force-enable the mel-context prepend (v3 opt-in)
+                                               (default: disabled on v3 and tdt-ja, enabled otherwise)
+                --mel-context                  Force-enable the mel-context prepend (v3/tdt-ja opt-in)
                 --dual-decode-arbitration      Enable v3/no-mel long-form boundary arbitration
                 --no-seam-gap-repair           Skip the post-merge re-decode of chunk-seam gaps (#758)
                 --no-seam-timing-realignment   Keep the left window's timing for seam tokens (pre-fix timings)

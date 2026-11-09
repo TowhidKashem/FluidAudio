@@ -52,12 +52,9 @@ public enum PocketTtsResourceDownloader {
 
         let required = ModelNames.PocketTTS.requiredModels(
             precision: precision, placement: placement)
-        let allPresent = required.allSatisfy { model in
-            FileManager.default.fileExists(
-                atPath: languageRoot.appendingPathComponent(model).path)
-        }
+        let incomplete = ModelCache.incompleteFiles(at: languageRoot, requiredFiles: required)
 
-        if allPresent {
+        if incomplete.isEmpty {
             logger.info(
                 "PocketTTS \(language.rawValue) (\(precision)) models found in cache")
             // Caches downloaded before the #853 variant-aware filter may still
@@ -94,7 +91,7 @@ public enum PocketTtsResourceDownloader {
         }
 
         logger.info(
-            "Downloading PocketTTS \(language.rawValue) (\(precision)) language pack from HuggingFace (\(subdir))..."
+            "Downloading PocketTTS \(language.rawValue) (\(precision)) language pack from HuggingFace (\(subdir)), missing or unfinished: \(incomplete.joined(separator: ", "))"
         )
         try await ModelHub.download(
             .pocketTts,
@@ -326,7 +323,9 @@ public enum PocketTtsResourceDownloader {
         let repoDir = modelsDirectory.appendingPathComponent(Repo.pocketTts.folderName)
         let encoderPath = repoDir.appendingPathComponent(ModelNames.PocketTTS.mimiEncoderFile)
 
-        if FileManager.default.fileExists(atPath: encoderPath.path) {
+        if ModelCache.isCacheComplete(
+            at: repoDir, requiredFiles: [ModelNames.PocketTTS.mimiEncoderFile])
+        {
             logger.info("Mimi encoder found in cache")
             return encoderPath
         }

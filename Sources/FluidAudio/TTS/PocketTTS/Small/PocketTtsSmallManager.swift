@@ -200,7 +200,7 @@ public enum PocketTtsSmallDownloader {
         let pack = repoDir.appendingPathComponent(model.repoSubdirectory)
         if requiredFiles(for: model).allSatisfy({
             FileManager.default.fileExists(atPath: pack.appendingPathComponent($0).path)
-        }) {
+        }) && !ModelCache.containsPartialDownload(at: pack) {
             logger.info("PocketTTS \(model.rawValue) pack found in cache")
             return pack
         }

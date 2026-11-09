@@ -20,11 +20,7 @@ public enum LuxTtsResourceDownloader {
         let repoDir = modelsRoot.appendingPathComponent(Repo.luxtts.folderName)
 
         let required = ModelNames.LuxTts.requiredFiles(variant: variant)
-        let allPresent = required.allSatisfy { file in
-            FileManager.default.fileExists(atPath: repoDir.appendingPathComponent(file).path)
-        }
-
-        if !allPresent {
+        if !ModelCache.isCacheComplete(at: repoDir, requiredFiles: required) {
             logger.info("Downloading LuxTTS CoreML assets (\(variant)/) from HuggingFace…")
             do {
                 try await ModelHub.download(

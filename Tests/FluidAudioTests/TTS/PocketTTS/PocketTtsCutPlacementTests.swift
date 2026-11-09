@@ -117,6 +117,47 @@ final class PocketTtsCutPlacementTests: XCTestCase {
             ["back from the lab...", "and then it failed.", "Did it matter?!", "Yes."])
     }
 
+    // MARK: - Closing quotes and brackets
+
+    func testClosingQuotesAndBracketsStayWithTheirSentence() {
+        XCTAssertEqual(
+            PocketTtsSynthesizer.splitSentences(
+                "\"Stop!\" She ran. He said 'go.' Then (quietly.) \"Is it over?\" \"Yes.\""),
+            ["\"Stop!\"", "She ran.", "He said 'go.'", "Then (quietly.)", "\"Is it over?\"", "\"Yes.\""])
+    }
+
+    func testSentenceEndingBeforeAClosingQuoteGetsNoExtraPeriod() {
+        XCTAssertEqual(
+            PocketTtsSynthesizer.normalizeText("he told them all, \"Stop right there!\"").text,
+            "He told them all, \"Stop right there!\"")
+        XCTAssertEqual(
+            PocketTtsSynthesizer.normalizeText("she checked the room one last time (just in case.)").text,
+            "She checked the room one last time (just in case.)")
+        XCTAssertEqual(
+            PocketTtsSynthesizer.normalizeText("she waited for the answer that never came\u{2026}").text,
+            "She waited for the answer that never came\u{2026}")
+    }
+
+    func testClauseMarkBeforeAClosingQuoteBecomesAPeriod() {
+        XCTAssertEqual(
+            PocketTtsSynthesizer.normalizeText("the note on the door said \"back in five minutes,\"").text,
+            "The note on the door said \"back in five minutes.\"")
+        XCTAssertEqual(
+            PocketTtsSynthesizer.normalizeText("the last word in the old book was \"goodbye\"").text,
+            "The last word in the old book was \"goodbye\".")
+    }
+
+    func testDialogueChunksKeepTheirClosingQuotes() throws {
+        let tokenizer = try makeEnglishTokenizer()
+        let text =
+            "\"We should leave before the storm reaches the valley tonight.\" She looked at the dark "
+            + "clouds over the hills. \"I know,\" he said, and he packed the last of the supplies into "
+            + "the old truck. \"Then hurry.\""
+        let parts = try chunks(text, tokenizer: tokenizer, voiceCachePosition: 126)
+        XCTAssertGreaterThan(parts.count, 1)
+        XCTAssertEqual(parts.joined(separator: " "), text)
+    }
+
     // MARK: - Balanced word-boundary splitting
 
     func testWordSplitUsesTheFewestPartsAndBalancesThem() throws {
@@ -210,5 +251,66 @@ final class PocketTtsCutPlacementTests: XCTestCase {
         XCTAssertEqual(result.count, 2)
         XCTAssertTrue(result[0].hasSuffix("precedes rain\u{2014}"), "cut not at the dash: \(result)")
         XCTAssertTrue(result[1].hasPrefix("a mix of ozone"), "cut not at the dash: \(result)")
+    }
+
+    // MARK: - Decimal numbers at a cut
+
+    func testClonedVoiceDoesNotCutAfterADecimalNumber() throws {
+        // On main the first chunk ends "a service fee of $822.95," and is
+        // synthesized as "... a service fee of $822.95."
+        let tokenizer = try makeEnglishTokenizer()
+        let text =
+            "The contractor sent the invoice on Monday morning after the job was finished, and it lists a "
+            + "service fee of $822.95, a charge for the parts that arrived late, and a fee for hauling away "
+            + "the old equipment."
+        XCTAssertEqual(
+            try chunks(text, tokenizer: tokenizer, voiceCachePosition: 251),
+            [
+                "The contractor sent the invoice on Monday morning after the job was finished,",
+                "and it lists a service fee of $822.95, a charge for the parts that arrived late, and a fee for "
+                    + "hauling away the old equipment.",
+            ])
+    }
+
+    func testClauseEndingOnADecimalNumberIsKeptWithTheNext() {
+        func kept(_ text: String) -> [String] {
+            PocketTtsSynthesizer.keepingDecimalEndsWithNext(
+                PocketTtsSynthesizer.clauseParts(of: text), fits: { _ in true }
+            ).map(\.text)
+        }
+        XCTAssertEqual(kept("a fee of $822.95, then more"), ["a fee of $822.95, then more"])
+        XCTAssertEqual(kept("pi is 3.14; e is 2.72, roughly"), ["pi is 3.14; e is 2.72, roughly"])
+        XCTAssertEqual(kept("un total de 822,95 \u{20AC}, puis rien"), ["un total de 822,95 \u{20AC}, puis rien"])
+        XCTAssertEqual(kept("version 3, then more"), ["version 3,", "then more"])
+        XCTAssertEqual(kept("it ends at 3.14,"), ["it ends at 3.14,"])
+    }
+
+    func testClauseEndingOnADecimalNumberIsCutWhenTheTwoDoNotFit() {
+        let parts = PocketTtsSynthesizer.keepingDecimalEndsWithNext(
+            PocketTtsSynthesizer.clauseParts(of: "a fee of $822.95, then more"), fits: { _ in false })
+        XCTAssertEqual(parts.map(\.text), ["a fee of $822.95,", "then more"])
+    }
+
+    // MARK: - Periods inside a word
+
+    func testPeriodBeforeALetterDoesNotEndASentence() {
+        XCTAssertEqual(
+            PocketTtsSynthesizer.splitSentences(
+                "Read the guide at www.kyutai.org first. Then write to jo@icloud.com today."),
+            ["Read the guide at www.kyutai.org first.", "Then write to jo@icloud.com today."])
+        XCTAssertEqual(
+            PocketTtsSynthesizer.splitSentences("Bring a tool, e.g. a hammer. We start at 4 p.m. Then we eat."),
+            ["Bring a tool, e.g. a hammer.", "We start at 4 p.m.", "Then we eat."])
+    }
+
+    func testChunksKeepAddressesWhole() throws {
+        let tokenizer = try makeEnglishTokenizer()
+        let text =
+            "The release notes for this version are on the project site at www.kyutai.org, and the "
+            + "team reads every message sent to jo@icloud.com. Questions about the old models, i.e. the "
+            + "ones from last year, go to the forum instead."
+        let parts = try chunks(text, tokenizer: tokenizer, voiceCachePosition: 126)
+        XCTAssertGreaterThan(parts.count, 1)
+        XCTAssertEqual(parts.joined(separator: " "), text)
     }
 }

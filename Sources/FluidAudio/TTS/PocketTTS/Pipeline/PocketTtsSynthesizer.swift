@@ -861,22 +861,12 @@ public struct PocketTtsSynthesizer {
                 language: language))
 
         if !isMidSentence {
-            // Strip trailing clause punctuation (commas, semicolons, colons, dashes)
-            // before adding sentence-ending punctuation
-            while let last = result.last, ",;:\u{2014}\u{2013}-".contains(last) {
-                result = String(result.dropLast())
-            }
-            result = result.trimmingCharacters(in: .whitespaces)
-
             // Capitalize first letter
             if let first = result.first, first.isLetter {
                 result = first.uppercased() + result.dropFirst()
             }
 
-            // Add period if no terminal punctuation
-            if let last = result.last, !".!?".contains(last) {
-                result += "."
-            }
+            result = withTerminalPunctuation(result)
         }
 
         // Pad short texts for better prosody — but only for full sentences.
@@ -894,6 +884,32 @@ public struct PocketTtsSynthesizer {
         }
 
         return (result, framesAfterEos)
+    }
+
+    /// Closing quotes and brackets. Right after a sentence's terminal punctuation
+    /// they belong to that sentence, as in `"Stop!"` or `(quietly.)`.
+    static let closingPunctuation: Set<Character> = ["\"", "'", ")", "]", "\u{00BB}", "\u{201D}", "\u{2019}"]
+
+    /// End `text` with sentence-final punctuation, as Python's
+    /// `_ensure_terminal_punctuation` does.
+    ///
+    /// Text that ends with `.`, `!`, `?` or `…`, possibly followed by closing quotes
+    /// or brackets, is left alone. A trailing comma, semicolon, colon or dash
+    /// becomes a period, inside the closing quotes. Anything else gets a period.
+    static func withTerminalPunctuation(_ text: String) -> String {
+        var core = Substring(text)
+        while let last = core.last, last == " " || closingPunctuation.contains(last) {
+            core = core.dropLast()
+        }
+        guard let last = core.last, !".!?\u{2026}".contains(last) else { return text }
+        guard ",;:\u{2014}\u{2013}-".contains(last) else { return text + "." }
+
+        while let last = core.last, ",;:\u{2014}\u{2013}- ".contains(last) {
+            core = core.dropLast()
+        }
+        guard !core.isEmpty else { return "" }
+        let closers = text[core.endIndex...].filter { closingPunctuation.contains($0) }
+        return String(core) + "." + closers
     }
 
     /// Split text into chunks that fit within the KV cache token limit.
@@ -1062,7 +1078,7 @@ public struct PocketTtsSynthesizer {
         }
 
         // First try: split at clause boundaries
-        let clauseParts = clauseParts(of: text)
+        let clauseParts = keepingDecimalEndsWithNext(clauseParts(of: text), fits: fits)
 
         // Group clause parts into chunks that fit, joined as they were in the text
         var result: [String] = []
@@ -1179,6 +1195,31 @@ public struct PocketTtsSynthesizer {
 
         flush()
         return parts
+    }
+
+    /// Join a clause part that ends on a decimal number to the part after it
+    /// when the two fit in one chunk, as pocket-tts does, so a chunk doesn't end
+    /// on one. The first chunk of a split sentence gets a period in place of its
+    /// trailing comma, and the model takes the decimal point of
+    /// "a fee of $822.95." for the sentence end, stopping before the decimals.
+    static func keepingDecimalEndsWithNext(
+        _ parts: [(text: String, spaced: Bool)],
+        fits: (String) -> Bool
+    ) -> [(text: String, spaced: Bool)] {
+        var result: [(text: String, spaced: Bool)] = []
+        for part in parts {
+            if let last = result.last,
+                last.text.range(of: #"\d[.,]\d+\W*$"#, options: .regularExpression) != nil
+            {
+                let joined = last.text + (part.spaced ? " " : "") + part.text
+                if fits(joined) {
+                    result[result.count - 1].text = joined
+                    continue
+                }
+            }
+            result.append(part)
+        }
+        return result
     }
 
     /// Split text at word boundaries to fit within the token limit.
@@ -1308,7 +1349,7 @@ public struct PocketTtsSynthesizer {
         "dr", "mr", "mrs", "ms", "prof", "sr", "jr", "st", "vs", "etc",
         "inc", "ltd", "co", "corp", "dept", "univ", "govt", "approx",
         "avg", "est", "gen", "gov", "hon", "sgt", "cpl", "pvt", "capt",
-        "lt", "col", "maj", "cmdr", "adm", "rev", "sen", "rep",
+        "lt", "col", "maj", "cmdr", "adm", "rev", "sen", "rep", "e.g", "i.e",
     ]
 
     /// French abbreviations that end with a period but don't end a sentence.
@@ -1342,6 +1383,8 @@ public struct PocketTtsSynthesizer {
     /// Split text into sentences at `.!?` boundaries.
     ///
     /// Handles abbreviations (e.g., "Dr.", "Prof.") by not splitting after them.
+    /// Closing quotes and brackets right after the punctuation stay with the
+    /// sentence they close (`"Stop!"`, `(quietly.)`).
     ///
     /// The `language` parameter selects the abbreviation table; English is the
     /// default. French (`.french24L`) uses `frenchAbbreviations` for civility
@@ -1354,8 +1397,11 @@ public struct PocketTtsSynthesizer {
         var sentences: [String] = []
         var current = ""
         let chars = Array(text)
+        // Characters before this index are already in `current`.
+        var resumeAt = 0
 
         for (i, char) in chars.enumerated() {
+            guard i >= resumeAt else { continue }
             current.append(char)
 
             guard ".!?".contains(char) else { continue }
@@ -1382,10 +1428,19 @@ public struct PocketTtsSynthesizer {
                     continue
                 }
 
-                // Skip if followed by a digit (e.g., "3.5")
-                if i + 1 < chars.count, chars[i + 1].isNumber {
+                // Skip if followed by a letter or digit without a space: a decimal,
+                // an address or a dotted abbreviation ("3.5", "www.kyutai.org", "p.m.")
+                if i + 1 < chars.count, chars[i + 1].isLetter || chars[i + 1].isNumber {
                     continue
                 }
+            }
+
+            // Closing quotes and brackets right after the punctuation end the
+            // sentence with it, so the next sentence does not start with them.
+            resumeAt = i + 1
+            while resumeAt < chars.count, closingPunctuation.contains(chars[resumeAt]) {
+                current.append(chars[resumeAt])
+                resumeAt += 1
             }
 
             let trimmed = current.trimmingCharacters(in: .whitespaces)

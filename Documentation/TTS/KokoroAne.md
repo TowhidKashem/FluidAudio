@@ -337,6 +337,33 @@ drops a word the G2P fallback cannot resolve, and emits leading punctuation as
 its own group. `inputIds` also omits characters absent from `vocab.json`, so
 its length can be shorter than `phonemes.count + 2`.
 
+### Punctuation pauses
+
+Kokoro's pause at a punctuation mark is the duration it predicts for that
+token; Mandarin `、` and `，` get only 50–125 ms. `setPunctuationPauses`
+replaces it per mark (#1105):
+
+```swift
+let mandarin = KokoroAneManager(variant: .mandarin)
+await mandarin.setPunctuationPauses(["、": .milliseconds(300), "，": .milliseconds(400)])
+let wav = try await mandarin.synthesize(text: "苹果、香蕉、橙子，都很好吃。")
+```
+
+Keys are marks as written. Mandarin keeps `、` and `，` apart although both
+reach the model as `,`; phoneme input and the other languages match the
+marks in the phoneme string, and a mark without its own entry uses the entry
+for the mark the model sees (`","` also covers `，` and `、`). Marks the
+frontend adds (the Mandarin `/` between words) and whitespace are not keys.
+Durations round to the 25 ms acoustic frame and do not scale with `speed`;
+when the pauses make one pass longer than its 2000-frame (50 s) cap, the text
+is split at a pause and rendered in parts. A longer pause is
+rendered as silence: the mark's tokens are stretched and, since stretching
+alone makes Prosody keep predicting voiced F0 (a hum, not a pause), the
+stretched frames get F0 0 and the energy of the utterance edges, keeping one
+predicted frame on each side. A shorter pause trims the predicted one.
+`predictedDurations` reports the rewritten durations. The CLI takes
+`--pause 、=300` (repeatable).
+
 ### Bypass G2P
 
 ```swift
@@ -423,7 +450,9 @@ The Mandarin variant ships a self-contained, network-free Hanzi → Bopomofo
 pipeline modelled on
 [`misaki[zh]`](https://github.com/hexgrad/misaki/blob/main/misaki/zh_frontend.py):
 
-1. **Punctuation normalization** — fullwidth `，。！？；：` collapse to ASCII.
+1. **Punctuation normalization** — fullwidth marks map to the ASCII ones
+   in the vocab with the spaces misaki's `map_punctuation` adds
+   (`，`/`、` → `, `, `。` → `. `, `（` → ` (`, `「` → ` “`).
 2. **Forward maximum match segmentation** — greedy phrase lookup against
    ~411k phrase entries, falls back to per-character single lookup
    (~42k Hanzi).
@@ -434,7 +463,14 @@ pipeline modelled on
    before tone 4, 一-promotion based on the next syllable's tone.
 5. **Bopomofo + tone-digit encoding** — initials/finals split, sibilant
    `i`-fix (`zi/ci/si → ㄭ`, `zhi/chi/shi/ri → 十`), j/q/x + u → ü, then
-   one bopomofo character per part + the tone digit.
+   one bopomofo character per part + the tone digit. Erhua is misaki's `R`
+   before the tone digit (`小孩儿` → `ㄒ要3ㄏㄞR2`).
+6. **Word separators** — `/` between adjacent words, as misaki's
+   `ZHFrontend` writes them after merging `不`/`一` with the next word,
+   reduplications, short third-tone pairs and `儿`
+   (`我们去公园吧？` → `我3ㄇㄣ5/ㄑㄩ4/ㄍ中1元2/ㄅㄚ5?`). Word boundaries come
+   from the segmentation above, not jieba's, so they can differ from
+   misaki's.
 
 Asset footprint (downloaded on first synthesis, cached at
 `<repoDir>/g2p/`):
@@ -452,7 +488,13 @@ out-of-vocabulary runs, tone sandhi, erhua folding and g2pW polyphone
 disambiguation. g2pW only fires on single-char dict fallbacks whose
 Hanzi exists in its Traditional inventory (e.g. `行`, `重`, `好`);
 simplified-only polyphones such as `还` / `长` / `发` keep the dict's
-first reading. Every g2pW asset is optional — if the bundle or its text
+first reading. That inventory is Taiwan-standard, so g2pW may only return
+readings the (mainland) dict lists or their neutral-tone forms; the
+probability of a Taiwan-only reading counts toward the dict's default
+(`和` read hàn becomes hé, `削` xuè becomes xuē). A character whose inventory
+entry lacks the dict's default in every tone keeps the dict's first reading:
+simplification merged it with another word (simplified `吨` "ton" is
+Traditional `噸`; Traditional `吨` reads tún). Every g2pW asset is optional — if the bundle or its text
 files are missing, synthesis continues dict-only.
 
 ## Japanese G2P
@@ -624,6 +666,7 @@ The following OS/runtime constraints affect the 7-stage chain:
 | MPSGraph abort (Metal route) | `SIGABRT` in MetalPerformanceShadersGraph while a GPU stage (noise / tail) runs under Core ML | iOS/iPadOS **27.0 through beta 8** (24A5430a), iPad17,2 and iPad16,2 | **Still live.** The default routing on OS 27 (`aneTailCpu`, #849) keeps Metal out of the chain. |
 | MPSGraph abort (v3 GPU route) | `SIGABRT` (`MTLReportFailure` in `GPURegionRuntime::allocateTensorDataForValue`, `ExpandDimsOp` reshape) on the first v3 synthesis, before any audio | macOS **27.0.1** (26A434), Mac16,5, every launch; not seen on M5 Pro / macOS 27.0 | **Avoided by default.** v3 now follows the OS 27 default (`aneTailCpu`) and skips the GPU-only fast generator (#1103). Passing `.aneTailGpu` re-arms it. |
 | BNNS input overread | `SIGSEGV` in `libBNNS` (`BnnsCpuInferenceOperation::ExecuteSync`) inside the Vocoder, or a full-scale (clipped) waveform when the overread does not fault | macOS **27.0**, M5 Pro, deterministic for certain lengths | **Fixed in FluidAudio.** A CPU kernel reads a few bytes past the end of the fp16 `x_source_0` input. That buffer (10,240·T bytes) fills whole 16 KB pages at T = 416, 440, … 584 (every 24 frames), so the overread hits an unmapped page, depending on heap layout. Chain inputs are now allocated with a zeroed one-page tail (`KokoroAneArrays.makeArray`), which turns the overread into a harmless read. Output is otherwise unchanged. |
+| Robotic onset (fp16 Vocoder on CPU) | First ~1 s of long sentences whispery, no harmonics; deterministic per sentence | SME chips (iPhone 17 Pro/Pro Max, iPhone 18 Pro, M5) on iOS/macOS 27; not M1 Max | **Opt-in fix:** `KokoroAneManager(vocoderPrecision: .float32)` loads `KokoroVocoder_v2` (fp32 compute, #1135). The default fp16 Vocoder on the Core ML CPU path was 25–65% off PyTorch over the first eighth of `x_pre` at 26 of 36 tested lengths; v2 is within 1.3% at all of them. Vocoder time on iPhone 17 Pro Max: 0.53 → 1.49 s for 23.6 s of audio. Legacy runtime only; `.v3` rejects `.float32`. |
 | BNNS `vadd_fp16_sme` segfault (Metal-free route) | `SIGSEGV` in `libBNNS` `vadd_fp16_sme_internal` on the OS-27 default route (noise + tail on CPU) | iOS **27.0** (24A5418b), iPhone18,1, ~54 min into a session | **Probably the input overread above; unverified on iOS** (#889). Same shape on macOS 27: an fp16 binary-op kernel under `dispatch_apply`, faulting on a page-aligned address. The rare trigger (a bad frame count plus an unmapped next page) explains the long, variable time to crash. The model, phonemizer and voice packs are not at fault: the same Kokoro-82M v1.0 graph ran 2 h 34 min on ONNX Runtime's CPU provider on the same OS line. `initialize()` keeps the iOS 27 advisory until a device soak confirms the fix. |
 
 The BNNS segfault cannot be avoided by compute-unit routing — CoreML places

@@ -43,6 +43,19 @@ final class KokoroAneV3Tests: XCTestCase {
         XCTAssertFalse(loaded)
     }
 
+    func testRejectsFp32VocoderBeforeDownloading() async throws {
+        // The fp32 Vocoder is legacy-only for now (#1135); v3 must not ignore it silently.
+        let store = KokoroAneModelStore(version: .v3, vocoderPrecision: .float32)
+        do {
+            try await store.loadIfNeeded()
+            XCTFail("fp32 vocoder request was silently ignored by v3")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("fp32 vocoder"))
+        }
+        let loaded = await store.isLoaded
+        XCTAssertFalse(loaded)
+    }
+
     // #1103: a Metal-free routing (the OS 27 default) skips the fast vocoder,
     // whose SourceGenerator only pays off on the GPU, and never fetches its assets.
     func testMetalFreeRoutingSkipsFastVocoderAndItsAssets() {
@@ -256,6 +269,15 @@ final class KokoroAneV3Tests: XCTestCase {
                 Array(repeating: zh, count: 4).joined(separator: " "), speed: 0.7),
             fast: false)
         try check(try await mandarin.synthesizeDetailed(text: "你好世界。"), fast: true)
+        // A punctuation pause rewrites the 、 cluster (`,` + ` `) and silences it.
+        await mandarin.setPunctuationPauses(["、": .milliseconds(400)])
+        let paused = try await mandarin.synthesizeDetailed(text: "你好、世界。")
+        try check(paused, fast: true)
+        let comma = try XCTUnwrap(paused.inputIds.firstIndex(of: 3))
+        XCTAssertEqual(paused.predictedDurations[comma] + paused.predictedDurations[comma + 1], 16)
+        let start = (Int(paused.predictedDurations[..<comma].reduce(0, +)) + 1) * 600
+        let interior = paused.samples[start..<(start + 13 * 600)]
+        XCTAssertLessThan(interior.map { abs($0) }.max() ?? 1, 0.001)
         await mandarin.cleanup()
     }
 

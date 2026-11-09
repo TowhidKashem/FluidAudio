@@ -608,6 +608,36 @@ stays. With vocabulary boosting the transcript text may hold a replacement
 for the retired word rather than its raw token text, so the manager tracks
 the rendered form of each window's last word and retires that.
 
+**Unspaced scripts (#1118).** `tdtJa` emits a word-start piece only where a
+window's decode begins, so the word rules above read the whole previous window
+as its last word and retired it: 9 of 12 seams on a 142 s file, 68% of the
+characters lost. For `tdtJa` the re-decoded unit is a time span instead: the
+previous window's tokens within 1 s of its last token (`unspacedTailStart`),
+where the decoder guesses at the window edge ("理解します。" ahead of
+"スペイン語を…"). `reconcileUnspacedSeam` replaces that tail when the re-decode
+emits inside it and reaches past it, and otherwise keeps it and drops the
+re-decode's copy. The tail stays inside the previous window and never starts
+within the new window's first second. Dedup matches runs of two or more
+tokens, so a single re-emitted copy of the last kept token (`植植物`) is dropped
+after it (`isUnspacedJitterCopy`); an equal character further back is the
+re-decode's own (`多いといわれ`). No `tdtJa` window counts as opening mid-word,
+and window texts join without a separator, since a seam can fall mid-sentence.
+On the two FLEURS `ja_jp` files from the issue (142 s / 180 s) streaming CER
+goes 67.4% / 38.7% → 3.4% / 6.4% (batch: 4.8% / 7.3%), and the 25 single clips
+4.4% → 4.2%.
+
+**Re-heard kept tokens (#1139).** The re-decode emits from 5 frames ahead of the
+replaced tail, so it can also re-emit the last one or two kept tokens, often
+segmented its own way: `心 的な` over a kept `心 的` read "自己中心的心的な", and
+`的な` over a kept `的 で` read "自己中心的で的な". Dedup matches neither (a single
+token, then a different id). `unspacedKeptCopyCount` drops the re-decode's leading
+tokens that start inside a kept token — from 5 frames before it through the next
+previous token's frame, where a merged `的な` often lands — and begin with the same
+character, in order and once per kept token, so the second `こ` of `ここ` stays.
+A token that begins like the retired token after it and is at least as close to it
+is that token's early re-emission and stays (`でき` after a kept `で`). The
+single-token jitter copies above are its special case.
+
 **End-aligned final window.** A short final flush window (a 16.9 s clip at
 an 8 s chunk leaves 0.9 s of new audio behind 2 s of left context) yields
 nothing from a fresh state, dropping the last words — the dominant remaining
@@ -1039,6 +1069,7 @@ swift test --filter ChunkProcessorTests
 swift test --filter ChunkProcessorSeamResidualTests   # PR #759 drop-path fallbacks
 swift test --filter SeamGapRepairTests                # issue #758 gap splice + energy gate
 swift test --filter ChunkProcessorUnspacedScriptTests # tdtJa: splice guard off
+swift test --filter SlidingWindowUnspacedScriptTests  # tdtJa: streaming seam re-decodes a time tail (#1118)
 swift test --filter EndAlignedFinalWindowTests        # issue #747 final-window backfill
 swift test --filter TdtRefactoredComponentsTests
 swift test --filter TdtDecoderV2Tests

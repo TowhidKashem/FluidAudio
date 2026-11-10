@@ -81,6 +81,7 @@ final class NemotronSplitEncoderTests: XCTestCase {
             try Data("x".utf8).write(to: root.appendingPathComponent(name).appendingPathComponent("coremldata.bin"))
             let weightFile = partialWeights ? "weight.bin.partial" : "weight.bin"
             try Data("w".utf8).write(to: weights.appendingPathComponent(weightFile))
+            try Data().write(to: root.appendingPathComponent("\(name)/\(ModelCache.completeMarkerName)"))
         }
         XCTAssertFalse(NemotronSplitEncoder.isCached(at: root))
         for name in NemotronSplitEncoder.fileNames {

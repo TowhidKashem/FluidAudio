@@ -177,10 +177,8 @@ public enum PocketTtsSmallDownloader {
     /// `ModelHub.download` creates the directories as soon as their first file
     /// lands and an interrupted download must not look complete.
     static let requiredFiles: [String] = [
-        ModelNames.PocketTTS.pocketStateFile + "/coremldata.bin",
-        ModelNames.PocketTTS.pocketStateFile + "/model.mil",
-        ModelNames.PocketTTS.mimiDecoderFile + "/coremldata.bin",
-        ModelNames.PocketTTS.mimiDecoderFile + "/model.mil",
+        ModelNames.PocketTTS.pocketStateFile,
+        ModelNames.PocketTTS.mimiDecoderFile,
         "arch.json", "pocket_state.json",
         ModelNames.PocketTTS.constantsBinDir + "/tokenizer.model",
         ModelNames.PocketTTS.constantsBinDir + "/text_embed_table.bin",
@@ -198,9 +196,7 @@ public enum PocketTtsSmallDownloader {
         let repoDir = base.appendingPathComponent(PocketTtsConstants.defaultModelsSubdirectory)
             .appendingPathComponent(Repo.pocketTts.folderName)
         let pack = repoDir.appendingPathComponent(model.repoSubdirectory)
-        if requiredFiles(for: model).allSatisfy({
-            FileManager.default.fileExists(atPath: pack.appendingPathComponent($0).path)
-        }) && !ModelCache.containsPartialDownload(at: pack) {
+        if ModelCache.isCacheComplete(at: pack, requiredFiles: Set(requiredFiles(for: model))) {
             logger.info("PocketTTS \(model.rawValue) pack found in cache")
             return pack
         }

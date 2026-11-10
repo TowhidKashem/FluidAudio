@@ -528,6 +528,7 @@ final class AsrModelsTests: XCTestCase {
             let modelDir = repoDir.appendingPathComponent(name)
             try fm.createDirectory(at: modelDir, withIntermediateDirectories: true)
             try Data().write(to: modelDir.appendingPathComponent("coremldata.bin"))
+            try Data().write(to: modelDir.appendingPathComponent(ModelCache.completeMarkerName))
         }
 
         // All bundles present but vocab absent -> cache is incomplete.

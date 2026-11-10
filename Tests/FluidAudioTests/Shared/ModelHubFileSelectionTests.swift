@@ -90,6 +90,7 @@ final class ModelHubFileSelectionTests: XCTestCase {
             [
                 "NOTES.txt",
                 "config.json",
+                "\(model)/\(ModelCache.completeMarkerName)",
                 "\(model)/coremldata.bin",
                 "\(model)/weights/weight.bin",
             ].sorted()
@@ -147,8 +148,10 @@ final class ModelHubFileSelectionTests: XCTestCase {
             try downloadedFiles(repoFolder: Repo.kokoro.folderName),
             [
                 vocab,
+                "\(encoder)/\(ModelCache.completeMarkerName)",
                 "\(encoder)/coremldata.bin",
                 "\(encoder)/model.mil",
+                "\(decoder)/\(ModelCache.completeMarkerName)",
                 "\(decoder)/coremldata.bin",
                 "\(decoder)/model.mil",
             ].sorted()
@@ -208,9 +211,12 @@ final class ModelHubFileSelectionTests: XCTestCase {
             try downloadedFiles(repoFolder: Repo.parakeetEou160.folderName),
             [
                 "config.json",
+                "\(decoder)/\(ModelCache.completeMarkerName)",
                 "\(decoder)/coremldata.bin",
+                "\(joint)/\(ModelCache.completeMarkerName)",
                 "\(joint)/coremldata.bin",
                 "stats.bin",
+                "\(encoder)/\(ModelCache.completeMarkerName)",
                 "\(encoder)/coremldata.bin",
                 "tokenizer.model",
                 vocab,

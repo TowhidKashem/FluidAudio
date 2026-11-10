@@ -580,6 +580,8 @@ public enum ModelHub {
 
         // Verify required models are present
         try ModelCache.verifyModelsPresent(at: repoPath, models: requiredModels)
+        try ModelCache.markBundlesComplete(
+            at: repoPath, localPaths: filesToDownload.map { ModelCache.localPath(for: $0.path, subPath: subPath) })
 
         logger.info("Downloaded all required models for \(repo.folderName)")
     }
@@ -695,6 +697,7 @@ public enum ModelHub {
                 addNextTask()
             }
         }
+        try ModelCache.markBundlesComplete(at: repoDirectory, localPaths: filesToDownload.map(\.path))
 
         logger.info("Downloaded \(subdirectory) from \(repo.folderName)")
     }

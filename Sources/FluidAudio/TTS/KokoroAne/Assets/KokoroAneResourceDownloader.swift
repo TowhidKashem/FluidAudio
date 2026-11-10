@@ -49,20 +49,7 @@ public enum KokoroAneResourceDownloader {
         }
         required.formUnion(additionalModelNames)
 
-        // ModelHub deliberately skips existing files. Repair legacy compiled
-        // bundles before the existence-only fast path so caches created before
-        // the flexible-shape models were published do not remain broken on the
-        // OS 27 E5 runtime forever (#738).
-        try await KokoroAneModelCacheMigrationCoordinator.shared.repairIfNeeded(
-            repo: repo,
-            modelsDirectory: modelsDirectory,
-            repoDirectory: repoDir,
-            progressHandler: progressHandler
-        )
-
-        let allPresent = required.allSatisfy { name in
-            FileManager.default.fileExists(atPath: repoDir.appendingPathComponent(name).path)
-        }
+        let allPresent = ModelCache.isCacheComplete(at: repoDir, requiredFiles: required)
 
         if !allPresent {
             logger.info("Downloading laishere Kokoro models (\(variant.rawValue)) from HuggingFace...")
@@ -75,6 +62,17 @@ public enum KokoroAneResourceDownloader {
         } else {
             logger.info("laishere Kokoro models (\(variant.rawValue)) found in cache at \(repoDir.path)")
         }
+
+        // ModelHub deliberately skips existing files. Repair legacy compiled
+        // bundles before the existence-only fast path so caches created before
+        // the flexible-shape models were published do not remain broken on the
+        // OS 27 E5 runtime forever (#738).
+        try await KokoroAneModelCacheMigrationCoordinator.shared.repairIfNeeded(
+            repo: repo,
+            modelsDirectory: modelsDirectory,
+            repoDirectory: repoDir,
+            progressHandler: progressHandler
+        )
 
         return repoDir
     }
@@ -386,9 +384,7 @@ public enum KokoroAneResourceDownloader {
     ) async throws {
         let modelsDirectory = try directory ?? defaultModelsDirectory()
         let kokoroDir = modelsDirectory.appendingPathComponent(Repo.kokoro.folderName)
-        let allPresent = ModelNames.G2P.requiredModels.allSatisfy { name in
-            FileManager.default.fileExists(atPath: kokoroDir.appendingPathComponent(name).path)
-        }
+        let allPresent = ModelCache.isCacheComplete(at: kokoroDir, requiredFiles: ModelNames.G2P.requiredModels)
         if allPresent {
             return
         }

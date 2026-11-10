@@ -40,6 +40,7 @@ final class ModelCacheCompletenessTests: XCTestCase {
         } else {
             try Data("w".utf8).write(to: weights.appendingPathComponent("weight.bin"))
         }
+        try Data().write(to: bundle.appendingPathComponent(ModelCache.completeMarkerName))
     }
 
     private func makeFile(_ name: String) throws {
@@ -249,6 +250,8 @@ final class ModelCacheCompletenessTests: XCTestCase {
         try Data("x".utf8).write(
             to: vadRepoPath.appendingPathComponent(ModelNames.VAD.sileroVadFile)
                 .appendingPathComponent("coremldata.bin"))
+        try Data().write(
+            to: vadRepoPath.appendingPathComponent("\(ModelNames.VAD.sileroVadFile)/\(ModelCache.completeMarkerName)"))
 
         // Offline mode proves no download is attempted for a complete cache.
         ModelHub.offlineMode = true
@@ -288,6 +291,7 @@ final class ModelCacheCompletenessTests: XCTestCase {
         let bundle = vadRepoPath.appendingPathComponent(ModelNames.VAD.sileroVadFile)
         try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
         try Data("x".utf8).write(to: bundle.appendingPathComponent("coremldata.bin"))
+        try Data().write(to: bundle.appendingPathComponent(ModelCache.completeMarkerName))
 
         ModelHub.offlineMode = true
         do {
@@ -315,6 +319,7 @@ final class ModelCacheCompletenessTests: XCTestCase {
         let bundle = vadRepoPath.appendingPathComponent(ModelNames.VAD.sileroVadFile)
         try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
         try Data("x".utf8).write(to: bundle.appendingPathComponent("coremldata.bin"))
+        try Data().write(to: bundle.appendingPathComponent(ModelCache.completeMarkerName))
 
         // Online: a purge-and-redownload would delete the bundle before any network attempt.
         do {
@@ -339,6 +344,7 @@ final class ModelCacheCompletenessTests: XCTestCase {
         let bundle = vadRepoPath.appendingPathComponent(ModelNames.VAD.sileroVadFile)
         try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
         try Data("x".utf8).write(to: bundle.appendingPathComponent("coremldata.bin"))
+        try Data().write(to: bundle.appendingPathComponent(ModelCache.completeMarkerName))
 
         // offlineMode stays false: if cancellation wrongly fell through to
         // purge-and-redownload, the purge assertion below would catch it

@@ -12,6 +12,7 @@ enum ModelCache {
     /// whole download trail; renaming it is a separate, opt-in decision.
     private static let logger = AppLogger(category: "DownloadUtils")
     private static let revisionMarkerName = ".fluidaudio-revision"
+    static let completeMarkerName = ".fluidaudio-complete"
 
     /// Whether the managed cache contains files from `revision`.
     ///
@@ -348,10 +349,31 @@ enum ModelCache {
             let path = repoPath.appendingPathComponent(file)
             if file.hasSuffix(".mlmodelc") {
                 guard (try? validateCompiledModelLayout(at: path, name: file)) != nil else { return true }
+                let marker = path.appendingPathComponent(completeMarkerName)
+                guard FileManager.default.fileExists(atPath: marker.path) else { return true }
                 return containsPartialDownload(at: path)
             }
             return !FileManager.default.fileExists(atPath: path.path)
         }.sorted()
+    }
+
+    static func markBundlesComplete(at root: URL, localPaths: [String]) throws {
+        let bundles = Set(
+            localPaths.compactMap { localPath -> String? in
+                let components = localPath.split(separator: "/")
+                guard let index = components.firstIndex(where: { $0.hasSuffix(".mlmodelc") }) else {
+                    return nil
+                }
+                return components[...index].joined(separator: "/")
+            })
+        for bundle in bundles {
+            let bundleURL = root.appendingPathComponent(bundle)
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: bundleURL.path, isDirectory: &isDirectory),
+                isDirectory.boolValue
+            else { continue }
+            try Data().write(to: bundleURL.appendingPathComponent(completeMarkerName), options: .atomic)
+        }
     }
 
     /// `true` when every file in `requiredFiles` is present and load-ready

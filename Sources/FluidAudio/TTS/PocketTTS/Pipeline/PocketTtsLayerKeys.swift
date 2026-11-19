@@ -33,6 +33,7 @@ struct PocketTtsLayerKeys: Sendable {
     let transformerOut: String?
     /// EOS logit output name (flowlm_step only). `nil` for cond_step.
     let eosLogit: String?
+    var textAttention: String? = nil
 
     var layerCount: Int { cacheKeys.count }
     /// Whether the model uses rank-4 split k/v cache I/O.
@@ -93,6 +94,7 @@ struct PocketTtsLayerKeys: Sendable {
         var positionCandidates: [String] = []
         var transformerCandidate: String?
         var eosCandidate: String?
+        var textAttentionCandidate: String?
 
         let cacheShape = [
             2, 1, PocketTtsConstants.kvCacheMaxLen, 16, 64,
@@ -113,6 +115,10 @@ struct PocketTtsLayerKeys: Sendable {
                 transformerCandidate = name
             } else if shape == eosShape {
                 eosCandidate = name
+            } else if shape.count == 3, shape[0] == 1,
+                shape[2] == PocketTtsConstants.kvCacheMaxLen
+            {
+                textAttentionCandidate = name
             }
         }
 
@@ -171,7 +177,8 @@ struct PocketTtsLayerKeys: Sendable {
                 vCacheKeys: nil,
                 positionKeys: positionCandidates,
                 transformerOut: transformerOut,
-                eosLogit: eosLogit
+                eosLogit: eosLogit,
+                textAttention: textAttentionCandidate
             )
         }
     }

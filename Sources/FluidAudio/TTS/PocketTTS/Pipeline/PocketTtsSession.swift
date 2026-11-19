@@ -324,6 +324,8 @@ public actor PocketTtsSession {
         let cachePosition = try PocketTtsSynthesizer.kvCachePosition(in: kvState)
         let maxGenLen = PocketTtsSynthesizer.boundedGenerationFrameCount(
             text: text, cachePosition: cachePosition)
+        let textRange = (cachePosition - tokenIds.count)..<cachePosition
+        let textPieces = tokenIds.map { constants.tokenizer.piece(for: $0) ?? "" }
         var eosStep: Int?
         var sequence = try PocketTtsSynthesizer.createBosStartSequence(
             bosEmbedding: constants.bosEmbedding,
@@ -335,13 +337,14 @@ public actor PocketTtsSession {
 
             // FlowLM step. `kvState` is function-local (not actor-isolated),
             // so it can be passed `inout` to the async free function directly.
-            let (transformerOut, eosLogit) = try await PocketTtsSynthesizer.runFlowLMStep(
-                sequence: sequence,
-                bosEmb: bosEmb,
-                state: &kvState,
-                model: stepModel,
-                layerKeys: flowlmLayerKeys
-            )
+            let (transformerOut, eosLogit, textAttention) =
+                try await PocketTtsSynthesizer.runFlowLMStep(
+                    sequence: sequence,
+                    bosEmb: bosEmb,
+                    state: &kvState,
+                    model: stepModel,
+                    layerKeys: flowlmLayerKeys
+                )
 
             // EOS detection
             if eosLogit > PocketTtsConstants.eosThreshold && eosStep == nil {
@@ -379,7 +382,11 @@ public actor PocketTtsSession {
                     frameIndex: step,
                     chunkIndex: chunkIndex,
                     chunkCount: chunkCount,
-                    utteranceIndex: utteranceIndex
+                    utteranceIndex: utteranceIndex,
+                    textPieces: textAttention == nil ? nil : textPieces,
+                    textAttention: textAttention.map {
+                        PocketTtsSynthesizer.textAttentionScores($0, textRange: textRange)
+                    }
                 )
             )
 

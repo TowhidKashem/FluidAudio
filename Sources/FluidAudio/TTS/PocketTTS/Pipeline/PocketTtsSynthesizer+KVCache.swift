@@ -574,7 +574,7 @@ extension PocketTtsSynthesizer {
         state: inout KVCacheState,
         model: MLModel,
         layerKeys: PocketTtsLayerKeys
-    ) async throws -> (transformerOut: MLMultiArray, eosLogit: Float) {
+    ) async throws -> (transformerOut: MLMultiArray, eosLogit: Float, textAttention: MLMultiArray?) {
         try validateKVCacheCapacity(
             currentPosition: try kvCachePosition(in: state), additionalPositions: 1)
         guard let transformerKey = layerKeys.transformerOut, let eosKey = layerKeys.eosLogit
@@ -614,7 +614,40 @@ extension PocketTtsSynthesizer {
         try extractCacheOutputs(
             output, state: &state, layerKeys: layerKeys, modelLabel: "flowlm_step")
 
-        return (transformerOut: transformerOut, eosLogit: eosLogit)
+        return (
+            transformerOut: transformerOut,
+            eosLogit: eosLogit,
+            textAttention: layerKeys.textAttention.flatMap {
+                output.featureValue(for: $0)?.multiArrayValue
+            }
+        )
+    }
+
+    static func textAttentionScores(
+        _ textAttention: MLMultiArray, textRange: Range<Int>
+    ) -> [Float] {
+        let shape = textAttention.shape.map(\.intValue)
+        guard shape.count == 3, !textRange.isEmpty, textRange.upperBound <= shape[2] else {
+            return []
+        }
+        let heads = shape[1]
+        let strides = textAttention.strides.map(\.intValue)
+        var scores = [Float](repeating: 0, count: textRange.count)
+        for head in 0..<heads {
+            var logits = textRange.map { position in
+                textAttention[head * strides[1] + position * strides[2]].floatValue
+            }
+            let maxLogit = logits.max() ?? 0
+            var sum: Float = 0
+            for index in logits.indices {
+                logits[index] = exp(logits[index] - maxLogit)
+                sum += logits[index]
+            }
+            for index in scores.indices {
+                scores[index] += logits[index] / (sum * Float(heads))
+            }
+        }
+        return scores
     }
 }
 #endif

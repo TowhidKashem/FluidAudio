@@ -25,6 +25,7 @@ public struct SentencePieceTokenizer: Sendable {
     /// Score of the edge that steps over one scalar no piece covers. Sits below
     /// every real piece so it is taken only where nothing else can be.
     private let unknownScore: Float
+    private let pieces: [String]
 
     /// The space replacement character used by SentencePiece.
     private static let spaceMarker: Character = "\u{2581}"
@@ -75,6 +76,11 @@ public struct SentencePieceTokenizer: Sendable {
         self.byteToId = bytes
         self.unknownId = unknownId
         self.unknownScore = (minScore ?? 0) - Self.unknownPenalty
+        self.pieces = model.pieces.map(\.piece)
+    }
+
+    public func piece(for id: Int) -> String? {
+        pieces.indices.contains(id) ? pieces[id] : nil
     }
 
     /// Tokenize text into token IDs using Viterbi unigram decoding.

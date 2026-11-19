@@ -162,6 +162,8 @@ public struct PocketTtsSynthesizer {
         /// Zero-based index of the enqueued utterance that produced this frame.
         /// Only set in session mode; `nil` for one-shot and streaming synthesis.
         public let utteranceIndex: Int?
+        public var textPieces: [String]? = nil
+        public var textAttention: [Float]? = nil
     }
 
     /// Synthesize audio as a stream of 80ms frames.
@@ -513,7 +515,7 @@ public struct PocketTtsSynthesizer {
                 layerKeys: flowlmLayerKeys
             )
             kvState = localState
-            return result
+            return (transformerOut: result.transformerOut, eosLogit: result.eosLogit)
         }
 
         func generate(

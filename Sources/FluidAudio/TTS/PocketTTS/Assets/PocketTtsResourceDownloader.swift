@@ -323,7 +323,7 @@ public enum PocketTtsResourceDownloader {
         let repoDir = modelsDirectory.appendingPathComponent(Repo.pocketTts.folderName)
         let encoderPath = repoDir.appendingPathComponent(ModelNames.PocketTTS.mimiEncoderFile)
 
-        if ModelCache.isCacheComplete(at: repoDir, requiredFiles: [ModelNames.PocketTTS.mimiEncoderFile]) {
+        if FileManager.default.fileExists(atPath: encoderPath.path) {
             logger.info("Mimi encoder found in cache")
             return encoderPath
         }

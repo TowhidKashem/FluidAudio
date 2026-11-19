@@ -44,9 +44,7 @@ final class AsrModelsEncoderV2Tests: XCTestCase {
             ModelNames.ASR.encoderV2File,
         ] {
             let bundle = repoDir.appendingPathComponent(file)
-            try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
-            try Data().write(to: bundle.appendingPathComponent("coremldata.bin"))
-            try Data().write(to: bundle.appendingPathComponent(ModelCache.completeMarkerName))
+            try CompiledBundleFixture.writeComplete(at: bundle)
         }
         try Data("{}".utf8).write(
             to: repoDir.appendingPathComponent(ModelNames.ASR.vocabularyFile))
@@ -71,9 +69,7 @@ final class AsrModelsEncoderV2Tests: XCTestCase {
 
         for file in ModelNames.ASR.requiredModelsV3(precision: .int8) {
             let bundle = repoDir.appendingPathComponent(file)
-            try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
-            try Data().write(to: bundle.appendingPathComponent("coremldata.bin"))
-            try Data().write(to: bundle.appendingPathComponent(ModelCache.completeMarkerName))
+            try CompiledBundleFixture.writeComplete(at: bundle)
         }
         try Data("{}".utf8).write(
             to: repoDir.appendingPathComponent(ModelNames.ASR.vocabularyFile))

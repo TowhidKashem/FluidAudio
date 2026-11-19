@@ -154,6 +154,15 @@ public enum Repo: String, CaseIterable, Sendable {
     /// `v1.2/<int8|fp32>/`, same file names, plus a `voice` input.
     case paradeeV12Int8 = "FluidInference/paradee-8m-coreml/v1.2/int8"
     case paradeeV12Fp32 = "FluidInference/paradee-8m-coreml/v1.2/fp32"
+    /// Paradee-8M v1.3: v1.2's graphs with eight voices (adds Hindi `hf_alpha`,
+    /// `hm_omega`, French `ff_siwis`, Spanish `em_alex`). `v1.3/<int8|fp32>/`,
+    /// same file names as v1.2 (FluidAudio #1159).
+    case paradeeV13Int8 = "FluidInference/paradee-8m-coreml/v1.3/int8"
+    case paradeeV13Fp32 = "FluidInference/paradee-8m-coreml/v1.3/fp32"
+    /// Paradee's eSpeak-free G2P (upstream package 1.3.1): `ParadeeG2P.mlmodelc`
+    /// + `paradee_g2p.json` in `v1.3/g2p/`, shared by both v1.3 variants
+    /// (FluidAudio #1159).
+    case paradeeV13G2P = "FluidInference/paradee-8m-coreml/v1.3/g2p"
     /// Chatterbox Multilingual (ResembleAI, 23 languages, **beta**) — T3 Llama-520M
     /// AR speech-token generator (CFG batch 2, MLState KV decode) + S3Gen
     /// flow-matching mel decoder + HiFT vocoder. Repo root holds the
@@ -288,6 +297,12 @@ public enum Repo: String, CaseIterable, Sendable {
             return "paradee-8m-coreml/v1.2/int8"
         case .paradeeV12Fp32:
             return "paradee-8m-coreml/v1.2/fp32"
+        case .paradeeV13Int8:
+            return "paradee-8m-coreml/v1.3/int8"
+        case .paradeeV13Fp32:
+            return "paradee-8m-coreml/v1.3/fp32"
+        case .paradeeV13G2P:
+            return "paradee-8m-coreml/v1.3/g2p"
         }
     }
 
@@ -320,7 +335,8 @@ public enum Repo: String, CaseIterable, Sendable {
             return "FluidInference/StyleTTS-2-coreml"
         case .inflectMicro, .inflectNano:
             return "FluidInference/inflect-v2-coreml"
-        case .paradeeInt8, .paradeeFp32, .paradeeV12Int8, .paradeeV12Fp32:
+        case .paradeeInt8, .paradeeFp32, .paradeeV12Int8, .paradeeV12Fp32, .paradeeV13Int8, .paradeeV13Fp32,
+            .paradeeV13G2P:
             return "FluidInference/paradee-8m-coreml"
         case .bark3, .bark3Clean:
             return "FluidInference/bark-3.0-coreml"
@@ -399,6 +415,12 @@ public enum Repo: String, CaseIterable, Sendable {
             return "v1.2/int8"
         case .paradeeV12Fp32:
             return "v1.2/fp32"
+        case .paradeeV13Int8:
+            return "v1.3/int8"
+        case .paradeeV13Fp32:
+            return "v1.3/fp32"
+        case .paradeeV13G2P:
+            return "v1.3/g2p"
         default:
             return nil
         }
@@ -497,6 +519,12 @@ public enum Repo: String, CaseIterable, Sendable {
             return "paradee-8m-coreml/v1.2/int8"
         case .paradeeV12Fp32:
             return "paradee-8m-coreml/v1.2/fp32"
+        case .paradeeV13Int8:
+            return "paradee-8m-coreml/v1.3/int8"
+        case .paradeeV13Fp32:
+            return "paradee-8m-coreml/v1.3/fp32"
+        case .paradeeV13G2P:
+            return "paradee-8m-coreml/v1.3/g2p"
         default:
             return name.replacingOccurrences(of: "-coreml", with: "")
         }
@@ -655,6 +683,12 @@ public enum ModelNames {
             melSpectrogramPath,
             audioEncoderPath,
         ]
+
+        /// `requiredModels` plus `vocab.json`: what a CTC cache needs to load.
+        /// `ModelHub` and `CtcModels.modelsExist` judge the cache by the same
+        /// set, so a missing vocabulary triggers the download that fetches it
+        /// (issue #1147).
+        public static let requiredFiles: Set<String> = requiredModels.union([vocabularyPath])
     }
 
     /// SenseVoiceSmall (FunASR) model names. 3-stage pipeline:
@@ -1090,6 +1124,19 @@ public enum ModelNames {
         public static let encoderFile = encoder + ".mlmodelc"
         public static let decoderFile = decoder + ".mlmodelc"
         public static let jointFile = joint + ".mlmodelc"
+
+        /// `encoder.mlmodelc` with the conv-cache slice of a concat rewritten so
+        /// M2 and M3 Neural Engines compile it; the original makes Core ML run
+        /// the encoder on the CPU there (issue #1141). Same weights, inputs and
+        /// outputs, byte-identical results. Published once per tier in
+        /// `encoder-v2/<tier>ms/` for both `latin` and `multilingual`, outside
+        /// the tier folders that older releases download whole. Loaded in place
+        /// of `encoder.mlmodelc` when a model directory has it.
+        public static let encoderV2File = "encoder_v2.mlmodelc"
+        /// Tiers with ``encoderV2File``. 4480 ms has no such slice.
+        public static let encoderV2ChunkMs: Set<Int> = [560, 1120, 2240]
+
+        static func encoderV2Subdirectory(chunkMs: Int) -> String { "encoder-v2/\(chunkMs)ms" }
 
         /// Same model names with the uncompiled `.mlpackage` extension that
         /// `mobius/.../coreml/build_int8/` ships before CoreML compilation.
@@ -1678,13 +1725,20 @@ public enum ModelNames {
 
     /// Paradee-8M model names. File names match
     /// `FluidInference/paradee-8m-coreml/<int8|fp32>/` (v1.0) and
-    /// `FluidInference/paradee-8m-coreml/v1.2/<int8|fp32>/`.
+    /// `FluidInference/paradee-8m-coreml/v1.<2|3>/<int8|fp32>/`.
     public enum Paradee {
         public static let textFile = "ParadeeText.mlmodelc"
         public static let acousticFile = "ParadeeAcoustic.mlmodelc"
         public static let vocabFile = "vocab.json"
 
         public static let requiredModels: Set<String> = [textFile, acousticFile, vocabFile]
+
+        /// eSpeak-free G2P in `v1.3/g2p/` (FluidAudio #1159): the CTC model and
+        /// its symbol tables, word lists and number pieces.
+        public static let g2pFile = "ParadeeG2P.mlmodelc"
+        public static let g2pDataFile = "paradee_g2p.json"
+
+        public static let g2pRequiredModels: Set<String> = [g2pFile, g2pDataFile]
     }
 
     /// LuxTTS (ZipVoice-Distill) model names. The HF repo publishes the same
@@ -2030,7 +2084,7 @@ public enum ModelNames {
         case .parakeetTdtCtc110m:
             return ModelNames.ASR.requiredModelsFused
         case .parakeetCtc110m, .parakeetCtc06b:
-            return ModelNames.CTC.requiredModels
+            return ModelNames.CTC.requiredFiles
         case .senseVoiceSmall:
             return ModelNames.SenseVoice.requiredModels(precision: variant)
         case .nemotron35TranscribeLite:
@@ -2138,8 +2192,10 @@ public enum ModelNames {
             return ModelNames.LuxTts.requiredFiles(variant: variant)
         case .inflectMicro, .inflectNano:
             return ModelNames.Inflect.requiredModels
-        case .paradeeInt8, .paradeeFp32, .paradeeV12Int8, .paradeeV12Fp32:
+        case .paradeeInt8, .paradeeFp32, .paradeeV12Int8, .paradeeV12Fp32, .paradeeV13Int8, .paradeeV13Fp32:
             return ModelNames.Paradee.requiredModels
+        case .paradeeV13G2P:
+            return ModelNames.Paradee.g2pRequiredModels
         }
     }
 }

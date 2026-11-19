@@ -204,8 +204,8 @@ final class ModelLayoutTests: XCTestCase {
             remoteRepoPath: otherRepository, revision: pinnedRevision, remoteDirectory: "")
     }
 
-    private func smallPack() throws -> ModelFolder {
-        let layout = try XCTUnwrap(ModelLayout.pocketTtsSmall(.english18m).first)
+    private func pocketTtsPack() throws -> ModelFolder {
+        let layout = try XCTUnwrap(ModelLayout.pocketTts().first)
         return ModelFolder(
             url: root.appendingPathComponent("pack"), requiredEntries: layout.requiredEntries, repo: .pocketTts,
             remoteDirectory: layout.remoteDirectory, shouldSkip: layout.shouldSkip)
@@ -365,48 +365,45 @@ final class ModelLayoutTests: XCTestCase {
     }
 
     func testSizesPackByWhatItsDownloadFetches() async throws {
-        let pack = try smallPack()
+        let pack = try pocketTtsPack()
         let directory = pack.remoteDirectory
         let tree = "tree/main/\(directory)"
         let pages: [String: [[String: Any]]] = [
             tree: [
                 ["path": "\(directory)/constants", "type": "directory"],
                 ["path": "\(directory)/constants_bin", "type": "directory"],
+                ["path": "\(directory)/cond_prefill.mlmodelc", "type": "directory"],
                 ["path": "\(directory)/flowlm_step.mlmodelc", "type": "directory"],
-                ["path": "\(directory)/mimi_decoder.mlmodelc", "type": "directory"],
-                ["path": "\(directory)/pocket_state.mlmodelc", "type": "directory"],
-                ["path": "\(directory)/pocket_state.mlpackage", "type": "directory"],
-                ["path": "\(directory)/arch.json", "type": "file", "size": 3],
+                ["path": "\(directory)/flowlm_step_ane.mlmodelc", "type": "directory"],
+                ["path": "\(directory)/flowlm_step.mlpackage", "type": "directory"],
                 ["path": "\(directory)/manifest.json", "type": "file", "size": 5],
-                ["path": "\(directory)/pocket_state.json", "type": "file", "size": 7],
-                ["path": "\(directory)/sample.wav", "type": "file", "size": 11],
+                ["path": "\(directory)/verify.wav", "type": "file", "size": 11],
             ],
             "\(tree)/constants_bin": [
-                ["path": "\(directory)/constants_bin/alba.safetensors", "type": "file", "size": 100],
-                ["path": "\(directory)/constants_bin/marius.safetensors", "type": "file", "size": 200],
-                ["path": "\(directory)/constants_bin/text_embed_table.bin", "type": "file", "size": 300],
                 ["path": "\(directory)/constants_bin/tokenizer.model", "type": "file", "size": 400],
+                ["path": "\(directory)/constants_bin/text_embed_table.bin", "type": "file", "size": 300],
+                ["path": "\(directory)/constants_bin/bos_before_voice.bin", "type": "file", "size": 100],
             ],
-            "\(tree)/mimi_decoder.mlmodelc": [
-                ["path": "\(directory)/mimi_decoder.mlmodelc/coremldata.bin", "type": "file", "size": 1_000]
+            "\(tree)/cond_prefill.mlmodelc": [
+                ["path": "\(directory)/cond_prefill.mlmodelc/coremldata.bin", "type": "file", "size": 1_000]
             ],
-            "\(tree)/pocket_state.mlmodelc": [
-                ["path": "\(directory)/pocket_state.mlmodelc/coremldata.bin", "type": "file", "size": 2_000]
+            "\(tree)/flowlm_step.mlmodelc": [
+                ["path": "\(directory)/flowlm_step.mlmodelc/coremldata.bin", "type": "file", "size": 2_000]
             ],
         ]
         let server = ListingServer(repo: Repo.pocketTts.remotePath, pages: pages)
 
         let bytes = try await ModelLayout.missingBytes(in: [pack], fetch: server.fetch)
 
-        XCTAssertEqual(bytes, 3 + 7 + 100 + 200 + 300 + 400 + 1_000 + 2_000)
+        XCTAssertEqual(bytes, 5 + 400 + 300 + 100 + 1_000 + 2_000)
         XCTAssertEqual(
             server.requested,
-            [tree, "\(tree)/constants_bin", "\(tree)/mimi_decoder.mlmodelc", "\(tree)/pocket_state.mlmodelc"])
+            [tree, "\(tree)/constants_bin", "\(tree)/cond_prefill.mlmodelc", "\(tree)/flowlm_step.mlmodelc"])
 
-        try write("pack/arch.json")
-        try write("pack/constants_bin/marius.safetensors")
+        try write("pack/manifest.json")
+        try write("pack/constants_bin/tokenizer.model")
         let remaining = try await ModelLayout.missingBytes(in: [pack], fetch: server.fetch)
-        XCTAssertEqual(remaining, 7 + 100 + 300 + 400 + 1_000 + 2_000)
+        XCTAssertEqual(remaining, 300 + 100 + 1_000 + 2_000)
     }
 
     func testSkipsTheListingWhenNothingIsMissing() async throws {

@@ -178,23 +178,6 @@ extension ModelLayout {
         try TtsCacheDirectory.ensure().appendingPathComponent(KokoroAneResourceDownloader.modelsSubdirectory)
     }
 
-    public static func kokoro() throws -> [ModelFolder] {
-        let modelsDirectory = try ttsModelsDirectory()
-        return [
-            ModelFolder(
-                url: try KokoroAneResourceDownloader.repositoryDirectory(
-                    variant: .english, directory: modelsDirectory),
-                requiredEntries: ModelNames.KokoroAne.requiredModels,
-                repo: .kokoroAne
-            ),
-            ModelFolder(
-                url: modelsDirectory.appendingPathComponent(Repo.kokoro.folderName),
-                requiredEntries: ModelNames.G2P.requiredModels,
-                repo: .kokoro
-            ),
-        ]
-    }
-
     public static func pocketTts() throws -> [ModelFolder] {
         let repoDirectory = try pocketTtsRepoDirectory()
         let packDirectory = PocketTtsLanguage.english.repoSubdirectory
@@ -206,34 +189,6 @@ extension ModelLayout {
                 repo: .pocketTts,
                 remoteDirectory: packDirectory,
                 shouldSkip: { PocketTtsResourceDownloader.shouldSkipAsset(at: $0, required: required) }
-            ),
-            ModelFolder(
-                url: repoDirectory,
-                requiredEntries: [ModelNames.PocketTTS.mimiEncoderFile],
-                repo: .pocketTts,
-                remoteDirectory: ""
-            ),
-        ]
-    }
-
-    public static func pocketTtsSmall(_ model: PocketTtsSmallModel) throws -> [ModelFolder] {
-        [
-            ModelFolder(
-                url: try pocketTtsRepoDirectory().appendingPathComponent(model.repoSubdirectory),
-                requiredEntries: Set(PocketTtsSmallDownloader.requiredFiles(for: model)),
-                repo: .pocketTts,
-                remoteDirectory: model.repoSubdirectory,
-                shouldSkip: { PocketTtsSmallDownloader.shouldSkipAsset(at: $0) }
-            )
-        ]
-    }
-
-    public static func luxTts() throws -> [ModelFolder] {
-        [
-            ModelFolder(
-                url: try ttsModelsDirectory().appendingPathComponent(Repo.luxtts.folderName),
-                requiredEntries: ModelNames.LuxTts.requiredFiles(variant: ModelNames.LuxTts.defaultVariant),
-                repo: .luxtts
             )
         ]
     }

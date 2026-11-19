@@ -160,6 +160,7 @@ public enum ModelRegistry {
     /// Create a URLSession configured with registry URL and proxy settings
     static func configuredSession() -> URLSession {
         let configuration = URLSessionConfiguration.default
+        configuration.networkServiceType = .background
 
         // Configure proxy settings if environment variables are set
         if let proxyConfig = configureProxySettings() {

@@ -26,10 +26,8 @@ final class ForkPatchTests: XCTestCase {
 
     private func makeUnmarkedBundle(_ path: String) throws {
         let bundle = workDir.appendingPathComponent(path)
-        let weights = bundle.appendingPathComponent("weights")
-        try FileManager.default.createDirectory(at: weights, withIntermediateDirectories: true)
-        try Data("x".utf8).write(to: bundle.appendingPathComponent("coremldata.bin"))
-        try Data("w".utf8).write(to: weights.appendingPathComponent("weight.bin"))
+        try CompiledBundleFixture.writeComplete(at: bundle)
+        try FileManager.default.removeItem(at: bundle.appendingPathComponent(ModelCache.completeMarkerName))
     }
 
     private func stubBundlePack(bodySize: Int) {
@@ -41,6 +39,7 @@ final class ForkPatchTests: XCTestCase {
             ],
             "pack/encoder.mlmodelc": [
                 ["path": "pack/encoder.mlmodelc/coremldata.bin", "type": "file", "size": bodySize],
+                ["path": "pack/encoder.mlmodelc/model.mil", "type": "file", "size": bodySize],
                 ["path": "pack/encoder.mlmodelc/weights", "type": "directory"],
             ],
             "pack/encoder.mlmodelc/weights": [
@@ -48,10 +47,11 @@ final class ForkPatchTests: XCTestCase {
             ],
             "pack/q8": [["path": "pack/q8/decoder.mlmodelc", "type": "directory"]],
             "pack/q8/decoder.mlmodelc": [
-                ["path": "pack/q8/decoder.mlmodelc/coremldata.bin", "type": "file", "size": bodySize]
+                ["path": "pack/q8/decoder.mlmodelc/coremldata.bin", "type": "file", "size": bodySize],
+                ["path": "pack/q8/decoder.mlmodelc/model.mil", "type": "file", "size": bodySize],
             ],
         ]
-        TreeStubURLProtocol.fileBody = Data(String(repeating: "x", count: bodySize).utf8)
+        TreeStubURLProtocol.fileBody = Data((String(repeating: " ", count: bodySize - 1) + "}").utf8)
     }
 
     func testBundleWithoutCompleteMarkerIsIncomplete() throws {
@@ -176,9 +176,7 @@ final class ModelLayoutTests: XCTestCase {
     }
 
     private func writeFinishedBundle(_ path: String) throws {
-        try write("\(path)/coremldata.bin")
-        try write("\(path)/weights/weight.bin")
-        try write("\(path)/\(ModelCache.completeMarkerName)")
+        try CompiledBundleFixture.writeComplete(at: root.appendingPathComponent(path))
     }
 
     private func relative(_ url: URL) -> String {
@@ -220,10 +218,8 @@ final class ModelLayoutTests: XCTestCase {
         try writeFinishedBundle("pocket-tts/v2.1/english_2026-04/flowlm_step.mlmodelc")
         try writeFinishedBundle("pocket-tts/v2/english/flowlm_step.mlmodelc")
         try write("pocket-tts/encoder_recover_pinv.bin")
-        try writeFinishedBundle("luxtts/ane/TextEncoder.mlmodelc")
-        try writeFinishedBundle("luxtts/ane/TextEncoderOld.mlmodelc")
-        try writeFinishedBundle("luxtts/gpu/TextEncoder.mlmodelc")
-        try write("luxtts/tokens.txt")
+        try writeFinishedBundle("retired-tts/ane/TextEncoder.mlmodelc")
+        try write("retired-tts/tokens.txt")
         try writeFinishedBundle("diarizer/model.mlmodelc")
         try write("notes/readme.json")
 
@@ -232,9 +228,6 @@ final class ModelLayoutTests: XCTestCase {
             keeping: [
                 folder("silero-vad", ["silero-vad-unified-256ms-v6.2.1.mlmodelc"]),
                 folder("pocket-tts/v2.1/english_2026-10", ["flowlm_step.mlmodelc", "constants_bin/alba.safetensors"]),
-                folder("pocket-tts", ["mimi_encoderv2.mlmodelc"]),
-                folder("luxtts", ["ane/TextEncoder.mlmodelc", "tokens.txt"]),
-                folder("kokoro", ["G2PEncoder.mlmodelc"]),
             ]
         )
 
@@ -242,21 +235,18 @@ final class ModelLayoutTests: XCTestCase {
             Set(removed.map(relative)),
             [
                 "silero-vad/silero-vad-unified-256ms-v6.0.0.mlmodelc",
+                "pocket-tts/mimi_encoderv2.mlmodelc",
                 "pocket-tts/v2.1/english_2026-04",
                 "pocket-tts/v2",
-                "luxtts/ane/TextEncoderOld.mlmodelc",
-                "luxtts/gpu",
+                "retired-tts",
                 "diarizer",
             ]
         )
         for kept in [
             "silero-vad/silero-vad-unified-256ms-v6.2.1.mlmodelc/weights/weight.bin",
-            "pocket-tts/mimi_encoderv2.mlmodelc/coremldata.bin",
             "pocket-tts/v2.1/english_2026-10/flowlm_step.mlmodelc/coremldata.bin",
             "pocket-tts/v2.1/english_2026-10/constants_bin/alba.safetensors",
             "pocket-tts/encoder_recover_pinv.bin",
-            "luxtts/ane/TextEncoder.mlmodelc/coremldata.bin",
-            "luxtts/tokens.txt",
             "notes/readme.json",
         ] {
             XCTAssertTrue(exists(kept), "\(kept) should stay")
@@ -286,8 +276,8 @@ final class ModelLayoutTests: XCTestCase {
     }
 
     func testSearchesRootsWhosePathsDifferOnlyByCase() throws {
-        try writeFinishedBundle("fluidaudio/Models/kokoro/G2PEncoder.mlmodelc")
-        try writeFinishedBundle("fluidaudio/Models/kokoro-old/G2PEncoder.mlmodelc")
+        try writeFinishedBundle("fluidaudio/Models/pocket-tts/flowlm_step.mlmodelc")
+        try writeFinishedBundle("fluidaudio/Models/pocket-tts-old/flowlm_step.mlmodelc")
         try writeFinishedBundle("FluidAudio/Models/silero-vad/current.mlmodelc")
         try writeFinishedBundle("FluidAudio/Models/silero-vad/old.mlmodelc")
         try writeFinishedBundle("FluidAudio/Models/parakeet-old/encoder.mlmodelc")
@@ -297,7 +287,7 @@ final class ModelLayoutTests: XCTestCase {
                 root.appendingPathComponent("fluidaudio/Models"), root.appendingPathComponent("FluidAudio/Models"),
             ],
             keeping: [
-                folder("fluidaudio/Models/kokoro", ["G2PEncoder.mlmodelc"]),
+                folder("fluidaudio/Models/pocket-tts", ["flowlm_step.mlmodelc"]),
                 folder("FluidAudio/Models/silero-vad", ["current.mlmodelc"]),
             ]
         )
@@ -305,12 +295,12 @@ final class ModelLayoutTests: XCTestCase {
         XCTAssertEqual(
             Set(removed.map { relative($0).lowercased() }),
             [
-                "fluidaudio/models/kokoro-old",
+                "fluidaudio/models/pocket-tts-old",
                 "fluidaudio/models/silero-vad/old.mlmodelc",
                 "fluidaudio/models/parakeet-old",
             ]
         )
-        XCTAssertTrue(exists("fluidaudio/Models/kokoro/G2PEncoder.mlmodelc/coremldata.bin"))
+        XCTAssertTrue(exists("fluidaudio/Models/pocket-tts/flowlm_step.mlmodelc/coremldata.bin"))
         XCTAssertTrue(exists("FluidAudio/Models/silero-vad/current.mlmodelc/coremldata.bin"))
     }
 

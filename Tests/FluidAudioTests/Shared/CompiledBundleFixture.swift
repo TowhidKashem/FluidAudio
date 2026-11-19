@@ -31,5 +31,6 @@ enum CompiledBundleFixture {
         try Data("x".utf8).write(to: bundle.appendingPathComponent("coremldata.bin"))
         try writeProgram(in: bundle)
         try Data("w".utf8).write(to: weights.appendingPathComponent("weight.bin"))
+        try Data().write(to: bundle.appendingPathComponent(ModelCache.completeMarkerName))
     }
 }

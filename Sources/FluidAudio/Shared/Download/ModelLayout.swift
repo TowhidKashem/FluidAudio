@@ -175,7 +175,7 @@ public enum ModelLayout {
 #if TTS
 extension ModelLayout {
     public static func ttsModelsDirectory() throws -> URL {
-        try TtsCacheDirectory.ensure().appendingPathComponent(KokoroAneResourceDownloader.modelsSubdirectory)
+        try TtsCacheDirectory.ensure().appendingPathComponent(PocketTtsConstants.defaultModelsSubdirectory)
     }
 
     public static func pocketTts() throws -> [ModelFolder] {
@@ -194,9 +194,7 @@ extension ModelLayout {
     }
 
     private static func pocketTtsRepoDirectory() throws -> URL {
-        try TtsCacheDirectory.ensure()
-            .appendingPathComponent(PocketTtsConstants.defaultModelsSubdirectory)
-            .appendingPathComponent(Repo.pocketTts.folderName)
+        try ttsModelsDirectory().appendingPathComponent(Repo.pocketTts.folderName)
     }
 }
 #endif

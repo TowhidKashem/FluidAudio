@@ -126,6 +126,28 @@ final class ForkPatchTests: XCTestCase {
             ModelCache.isCacheComplete(
                 at: workDir.appendingPathComponent("pack"), requiredFiles: ["encoder.mlmodelc"]))
     }
+
+    func testDownloadClearsALeftoverPartialOfAFileAlreadyOnDisk() async throws {
+        stubBundlePack(bodySize: 16)
+        let weights = workDir.appendingPathComponent("pack/encoder.mlmodelc/weights")
+        try FileManager.default.createDirectory(at: weights, withIntermediateDirectories: true)
+        let weight = weights.appendingPathComponent("weight.bin")
+        try Data(String(repeating: "x", count: 16).utf8).write(to: weight)
+        let partial = weight.appendingPathExtension("partial")
+        try Data("xxxx".utf8).write(to: partial)
+        try Data("\"etag\"".utf8).write(to: FileDownloader.resumeValidatorURL(for: partial))
+
+        try await ModelHub.download(
+            .vad, subdirectory: "pack", to: workDir,
+            configuration: stubConfiguration)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: partial.path))
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: FileDownloader.resumeValidatorURL(for: partial).path))
+        XCTAssertTrue(
+            ModelCache.isCacheComplete(
+                at: workDir.appendingPathComponent("pack"), requiredFiles: ["encoder.mlmodelc"]))
+    }
 }
 
 final class ModelLayoutTests: XCTestCase {

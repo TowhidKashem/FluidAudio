@@ -52,10 +52,7 @@ public enum PocketTtsResourceDownloader {
 
         let required = ModelNames.PocketTTS.requiredModels(
             precision: precision, placement: placement)
-        let allPresent = required.allSatisfy { model in
-            FileManager.default.fileExists(
-                atPath: languageRoot.appendingPathComponent(model).path)
-        }
+        let allPresent = ModelCache.isCacheComplete(at: languageRoot, requiredFiles: required)
 
         if allPresent {
             logger.info(

@@ -51,6 +51,7 @@ enum FileDownloader {
             guard recoveringBlockedPaths, file.size > 0,
                 let size = ModelCache.fileSize(at: destination), size != file.size
             else {
+                clearPartialDownload(destination.appendingPathExtension("partial"))
                 return .alreadyPresent
             }
             logger.warning("Re-downloading \(file.path): \(size) bytes on disk, \(file.size) published")

@@ -41,6 +41,7 @@ final class ModelCacheCompletenessTests: XCTestCase {
         } else {
             try Data("w".utf8).write(to: weights.appendingPathComponent("weight.bin"))
         }
+        try Data().write(to: bundle.appendingPathComponent(ModelCache.completeMarkerName))
     }
 
     private func makeFile(_ name: String) throws {

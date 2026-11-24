@@ -99,8 +99,7 @@ final class PocketTtsStreamingTests: XCTestCase {
 
     func testNormalizeTextShortTextPadding() {
         // Short text (< 5 words) gets padding
-        let (text, frames) = PocketTtsSynthesizer.normalizeText("Hi")
-        XCTAssertTrue(text.hasPrefix(" "), "Short text should be padded")
+        let (_, frames) = PocketTtsSynthesizer.normalizeText("Hi")
         XCTAssertEqual(frames, PocketTtsConstants.shortTextPadFrames)
     }
 

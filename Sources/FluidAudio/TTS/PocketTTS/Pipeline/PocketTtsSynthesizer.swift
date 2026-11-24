@@ -879,7 +879,6 @@ public struct PocketTtsSynthesizer {
         let wordCount = result.split(separator: " ").count
         let framesAfterEos: Int
         if !isMidSentence, wordCount < PocketTtsConstants.shortTextWordThreshold {
-            result = String(repeating: " ", count: 8) + result
             framesAfterEos = PocketTtsConstants.shortTextPadFrames
         } else {
             framesAfterEos = PocketTtsConstants.longTextExtraFrames

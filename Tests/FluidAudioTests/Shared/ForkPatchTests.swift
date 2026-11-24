@@ -477,4 +477,11 @@ final class ModelLayoutTests: XCTestCase {
         XCTAssertEqual(bytes, 30)
         XCTAssertEqual(server.requested, [tree, "\(tree)/voice.mlmodelc"])
     }
+
+    func testShortSentenceReachesTheModelWithoutLeadingSpaces() {
+        let (text, framesAfterEos) = PocketTtsSynthesizer.normalizeText("fine")
+
+        XCTAssertEqual(text, "Fine.")
+        XCTAssertEqual(framesAfterEos, PocketTtsConstants.shortTextPadFrames)
+    }
 }
